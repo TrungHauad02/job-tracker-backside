@@ -37,13 +37,28 @@ const startServer = async (): Promise<void> => {
         console.log('HTTP server closed');
 
         try {
-          // Close Redis connection
-          await redisClient.quit();
-          console.log('Redis connection closed');
+          // Only attempt to quit if the client is open
+          // redisClient.isOpen is true when the client has an active connection
+          if (typeof (redisClient as any).isOpen === 'boolean' && (redisClient as any).isOpen) {
+            try {
+              await redisClient.quit();
+              console.log('Redis connection closed');
+            } catch (err: any) {
+              // Ignore client-closed errors during shutdown
+              if (err && err.name === 'ClientClosedError') {
+                console.warn('Redis client was already closed');
+              } else {
+                console.error('Error during Redis shutdown:', err);
+              }
+            }
+          } else {
+            console.log('Redis client not open, skipping quit()');
+          }
+
           console.log('✅ Shutdown complete');
           process.exit(0);
         } catch (error) {
-          console.error('Error during Redis shutdown:', error);
+          console.error('Error during shutdown:', error);
           process.exit(1);
         }
       });
