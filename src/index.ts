@@ -1,25 +1,25 @@
 /**
  * Server Entry Point
  *
- * Initializes the Express server and connects to Redis.
+ * Initializes the Express server and connects to MongoDB.
  * Handles graceful shutdown on SIGTERM and SIGINT signals.
  */
 
 import 'dotenv/config';
 import app from './app.js';
-import { connectRedis, redisClient } from './config/redis.config.js';
+import { connectMongoDB, disconnectMongoDB } from './config/mongodb.config.js';
 
 const PORT = process.env.PORT || 3000;
 
 /**
  * Start the server
- * Connects to Redis first, then starts the HTTP server
+ * Connects to MongoDB first, then starts the HTTP server
  */
 const startServer = async (): Promise<void> => {
   try {
-    // Connect to Redis
-    await connectRedis();
-    console.log('✅ Connected to Redis');
+    // Connect to MongoDB
+    await connectMongoDB();
+    console.log('✅ Connected to MongoDB');
 
     // Start Express server
     const server = app.listen(PORT, () => {
@@ -37,24 +37,9 @@ const startServer = async (): Promise<void> => {
         console.log('HTTP server closed');
 
         try {
-          // Only attempt to quit if the client is open
-          // redisClient.isOpen is true when the client has an active connection
-          if (typeof (redisClient as any).isOpen === 'boolean' && (redisClient as any).isOpen) {
-            try {
-              await redisClient.quit();
-              console.log('Redis connection closed');
-            } catch (err: any) {
-              // Ignore client-closed errors during shutdown
-              if (err && err.name === 'ClientClosedError') {
-                console.warn('Redis client was already closed');
-              } else {
-                console.error('Error during Redis shutdown:', err);
-              }
-            }
-          } else {
-            console.log('Redis client not open, skipping quit()');
-          }
-
+          // Close MongoDB connection
+          await disconnectMongoDB();
+          
           console.log('✅ Shutdown complete');
           process.exit(0);
         } catch (error) {

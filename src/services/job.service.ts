@@ -2,13 +2,11 @@
  * Job Service
  *
  * Business logic layer for job management operations.
- * Handles CRUD operations and maintains Redis data consistency.
+ * Handles CRUD operations using MongoDB/Mongoose.
  */
 
-import { v4 as uuidv4 } from 'uuid';
 import { Job, CreateJobDTO, UpdateJobDTO, JobStatus } from '../types/job.types.js';
-import { RedisKeys } from '../utils/redisKeys.js';
-import * as redisService from './redis.service.js';
+import { JobModel } from '../models/job.model.js';
 
 /**
  * Create a new job
@@ -16,29 +14,26 @@ import * as redisService from './redis.service.js';
  * @returns Created job object with generated ID and timestamps
  */
 export const createJob = async (data: CreateJobDTO): Promise<Job> => {
-  // Generate unique ID
-  const id = uuidv4();
-  const now = new Date().toISOString();
-
-  // Construct complete job object
-  const job: Job = {
-    id,
-    ...data,
-    createdAt: now,
-    updatedAt: now,
-  };
-
   try {
-    // Save job to Redis
-    await redisService.setJob(id, job);
+    // Create new job document
+    const jobDoc = new JobModel(data);
+    await jobDoc.save();
 
-    // Add to all jobs set
-    await redisService.addToSet(RedisKeys.allJobs(), id);
-
-    // Add to status-specific set
-    await redisService.addToSet(RedisKeys.jobsByStatus(job.status), id);
-
-    return job;
+    const saved = jobDoc.toObject();
+    return {
+      id: saved._id.toString(),
+      jobTitle: saved.jobTitle,
+      companyName: saved.companyName,
+      applicationLink: saved.applicationLink,
+      companyLink: saved.companyLink,
+      requirements: saved.requirements,
+      jobDescription: saved.jobDescription,
+      status: saved.status,
+      notes: saved.notes,
+      appliedDate: saved.appliedDate,
+      createdAt: saved.createdAt instanceof Date ? saved.createdAt.toISOString() : saved.createdAt,
+      updatedAt: saved.updatedAt instanceof Date ? saved.updatedAt.toISOString() : saved.updatedAt,
+    };
   } catch (error) {
     console.error('Failed to create job:', error);
     throw new Error(`Failed to create job: ${error}`);
@@ -46,24 +41,71 @@ export const createJob = async (data: CreateJobDTO): Promise<Job> => {
 };
 
 /**
- * Get all jobs
- * @returns Array of all jobs
+ * Get all jobs with pagination
+ * @param page - Page number (starts from 1)
+ * @param limit - Number of items per page
+ * @returns Paginated jobs with metadata
  */
-export const getAllJobs = async (): Promise<Job[]> => {
+export const getAllJobs = async (
+  page: number = 1,
+  limit: number = 10
+): Promise<{
+  jobs: Job[];
+  pagination: {
+    currentPage: number;
+    totalPages: number;
+    totalItems: number;
+    itemsPerPage: number;
+    hasNextPage: boolean;
+    hasPreviousPage: boolean;
+  };
+}> => {
   try {
-    // Get all job IDs
-    const jobIds = await redisService.getSetMembers(RedisKeys.allJobs());
+    // Validate and sanitize inputs
+    const pageNum = Math.max(1, page);
+    const limitNum = Math.max(1, Math.min(100, limit)); // Max 100 items per page
+    const skip = (pageNum - 1) * limitNum;
 
-    if (jobIds.length === 0) {
-      return [];
-    }
+    // Get total count for pagination metadata
+    const totalItems = await JobModel.countDocuments();
 
-    // Fetch all job objects in parallel
-    const jobPromises = jobIds.map((id) => redisService.getJob(id));
-    const jobs = await Promise.all(jobPromises);
+    // Fetch paginated jobs from MongoDB, sorted by creation date (newest first)
+    const jobs = await JobModel.find()
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limitNum)
+      .lean();
 
-    // Filter out any null values (in case of corrupted data)
-    return jobs.filter((job): job is Job => job !== null);
+    // Convert MongoDB documents to Job type
+    const formattedJobs = jobs.map((job) => ({
+      id: job._id.toString(),
+      jobTitle: job.jobTitle,
+      companyName: job.companyName,
+      applicationLink: job.applicationLink,
+      companyLink: job.companyLink,
+      requirements: job.requirements,
+      jobDescription: job.jobDescription,
+      status: job.status,
+      notes: job.notes,
+      appliedDate: job.appliedDate,
+      createdAt: job.createdAt instanceof Date ? job.createdAt.toISOString() : job.createdAt,
+      updatedAt: job.updatedAt instanceof Date ? job.updatedAt.toISOString() : job.updatedAt,
+    }));
+
+    // Calculate pagination metadata
+    const totalPages = Math.ceil(totalItems / limitNum);
+
+    return {
+      jobs: formattedJobs,
+      pagination: {
+        currentPage: pageNum,
+        totalPages,
+        totalItems,
+        itemsPerPage: limitNum,
+        hasNextPage: pageNum < totalPages,
+        hasPreviousPage: pageNum > 1,
+      },
+    };
   } catch (error) {
     console.error('Failed to get all jobs:', error);
     throw new Error(`Failed to retrieve jobs: ${error}`);
@@ -77,8 +119,26 @@ export const getAllJobs = async (): Promise<Job[]> => {
  */
 export const getJobById = async (id: string): Promise<Job | null> => {
   try {
-    const job = await redisService.getJob(id);
-    return job;
+    const job = await JobModel.findById(id).lean();
+    
+    if (!job) {
+      return null;
+    }
+
+    return {
+      id: job._id.toString(),
+      jobTitle: job.jobTitle,
+      companyName: job.companyName,
+      applicationLink: job.applicationLink,
+      companyLink: job.companyLink,
+      requirements: job.requirements,
+      jobDescription: job.jobDescription,
+      status: job.status,
+      notes: job.notes,
+      appliedDate: job.appliedDate,
+      createdAt: job.createdAt instanceof Date ? job.createdAt.toISOString() : job.createdAt,
+      updatedAt: job.updatedAt instanceof Date ? job.updatedAt.toISOString() : job.updatedAt,
+    };
   } catch (error) {
     console.error(`Failed to get job ${id}:`, error);
     throw new Error(`Failed to retrieve job: ${error}`);
@@ -93,36 +153,31 @@ export const getJobById = async (id: string): Promise<Job | null> => {
  */
 export const updateJob = async (id: string, data: UpdateJobDTO): Promise<Job | null> => {
   try {
-    // Get existing job
-    const existingJob = await redisService.getJob(id);
+    // Find and update the job
+    const updatedJob = await JobModel.findByIdAndUpdate(
+      id,
+      { $set: data },
+      { new: true, runValidators: true }
+    ).lean();
 
-    if (!existingJob) {
+    if (!updatedJob) {
       return null;
     }
 
-    // Check if status is changing
-    const statusChanged = data.status && data.status !== existingJob.status;
-    const oldStatus = existingJob.status;
-
-    // Merge update data with existing job
-    const updatedJob: Job = {
-      ...existingJob,
-      ...data,
-      updatedAt: new Date().toISOString(),
+    return {
+      id: updatedJob._id.toString(),
+      jobTitle: updatedJob.jobTitle,
+      companyName: updatedJob.companyName,
+      applicationLink: updatedJob.applicationLink,
+      companyLink: updatedJob.companyLink,
+      requirements: updatedJob.requirements,
+      jobDescription: updatedJob.jobDescription,
+      status: updatedJob.status,
+      notes: updatedJob.notes,
+      appliedDate: updatedJob.appliedDate,
+      createdAt: updatedJob.createdAt instanceof Date ? updatedJob.createdAt.toISOString() : updatedJob.createdAt,
+      updatedAt: updatedJob.updatedAt instanceof Date ? updatedJob.updatedAt.toISOString() : updatedJob.updatedAt,
     };
-
-    // Save updated job
-    await redisService.setJob(id, updatedJob);
-
-    // Handle status set changes if status was updated
-    if (statusChanged && data.status) {
-      // Remove from old status set
-      await redisService.removeFromSet(RedisKeys.jobsByStatus(oldStatus), id);
-      // Add to new status set
-      await redisService.addToSet(RedisKeys.jobsByStatus(data.status), id);
-    }
-
-    return updatedJob;
   } catch (error) {
     console.error(`Failed to update job ${id}:`, error);
     throw new Error(`Failed to update job: ${error}`);
@@ -136,21 +191,11 @@ export const updateJob = async (id: string, data: UpdateJobDTO): Promise<Job | n
  */
 export const deleteJob = async (id: string): Promise<boolean> => {
   try {
-    // Get existing job to retrieve its status
-    const existingJob = await redisService.getJob(id);
-
-    if (!existingJob) {
+    const result = await JobModel.findByIdAndDelete(id);
+    
+    if (!result) {
       return false;
     }
-
-    // Delete job key
-    await redisService.deleteJobKey(id);
-
-    // Remove from all jobs set
-    await redisService.removeFromSet(RedisKeys.allJobs(), id);
-
-    // Remove from status-specific set
-    await redisService.removeFromSet(RedisKeys.jobsByStatus(existingJob.status), id);
 
     return true;
   } catch (error) {
@@ -166,19 +211,24 @@ export const deleteJob = async (id: string): Promise<boolean> => {
  */
 export const getJobsByStatus = async (status: JobStatus): Promise<Job[]> => {
   try {
-    // Get job IDs with this status
-    const jobIds = await redisService.getSetMembers(RedisKeys.jobsByStatus(status));
+    // Query MongoDB for jobs with the specified status
+    const jobs = await JobModel.find({ status }).sort({ createdAt: -1 }).lean();
 
-    if (jobIds.length === 0) {
-      return [];
-    }
-
-    // Fetch all job objects in parallel
-    const jobPromises = jobIds.map((id) => redisService.getJob(id));
-    const jobs = await Promise.all(jobPromises);
-
-    // Filter out null values and ensure status matches (data consistency check)
-    return jobs.filter((job): job is Job => job !== null && job.status === status);
+    // Convert MongoDB documents to Job type
+    return jobs.map((job) => ({
+      id: job._id.toString(),
+      jobTitle: job.jobTitle,
+      companyName: job.companyName,
+      applicationLink: job.applicationLink,
+      companyLink: job.companyLink,
+      requirements: job.requirements,
+      jobDescription: job.jobDescription,
+      status: job.status,
+      notes: job.notes,
+      appliedDate: job.appliedDate,
+      createdAt: job.createdAt instanceof Date ? job.createdAt.toISOString() : job.createdAt,
+      updatedAt: job.updatedAt instanceof Date ? job.updatedAt.toISOString() : job.updatedAt,
+    }));
   } catch (error) {
     console.error(`Failed to get jobs with status ${status}:`, error);
     throw new Error(`Failed to retrieve jobs by status: ${error}`);
