@@ -21,7 +21,7 @@ export const createJob = async (data: CreateJobDTO): Promise<Job> => {
 
     const saved = jobDoc.toObject();
     return {
-      id: saved._id.toString(),
+      id: saved.id,
       jobTitle: saved.jobTitle,
       companyName: saved.companyName,
       applicationLink: saved.applicationLink,
