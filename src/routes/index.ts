@@ -7,6 +7,7 @@
 
 import express from 'express';
 import jobRoutes from './job.routes.js';
+import knowledgeRoutes from './knowledge.routes.js';
 
 const router = express.Router();
 
@@ -23,6 +24,16 @@ const router = express.Router();
  * - DELETE /api/jobs/:id          - Delete job
  */
 router.use('/jobs', jobRoutes);
+
+/**
+ * Knowledge routes
+ * Mounted at /api/knowledge
+ *
+ * Available endpoints:
+ * - POST   /api/knowledge/extract  - Extract knowledge from job posting
+ * - POST   /api/knowledge/research - Research knowledge topic
+ */
+router.use('/knowledge', knowledgeRoutes);
 
 /**
  * Health check endpoint
