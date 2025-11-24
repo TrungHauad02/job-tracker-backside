@@ -37,17 +37,22 @@ export const createJobHandler = async (req: Request, res: Response): Promise<voi
 };
 
 /**
- * Get all jobs
- * GET /api/jobs
+ * Get all jobs with pagination
+ * GET /api/jobs?page=1&limit=10
  */
 export const getAllJobsHandler = async (req: Request, res: Response): Promise<void> => {
   try {
-    const jobs = await jobService.getAllJobs();
+    // Extract pagination parameters from query string
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 10;
 
-    const response: ApiResponse<typeof jobs> = {
+    const result = await jobService.getAllJobs(page, limit);
+
+    const response: ApiResponse<typeof result.jobs> = {
       success: true,
-      data: jobs,
-      message: `Retrieved ${jobs.length} job(s)`,
+      data: result.jobs,
+      message: `Retrieved ${result.jobs.length} job(s) from page ${result.pagination.currentPage}`,
+      pagination: result.pagination,
     };
 
     res.status(200).json(response);
