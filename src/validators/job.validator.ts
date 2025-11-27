@@ -65,10 +65,10 @@ export const createJobSchema = Joi.object({
     }),
 
   status: Joi.string()
-    .valid('Pending', 'Reject', 'Interview', 'Hired')
+    .valid('Pending', 'Applied', 'Reject', 'Interview', 'Hired')
     .required()
     .messages({
-      'any.only': 'Status must be one of: Pending, Reject, Interview, Hired',
+      'any.only': 'Status must be one of: Pending, Applied, Reject, Interview, Hired',
       'any.required': 'Status is required',
     }),
 
@@ -125,9 +125,9 @@ export const updateJobSchema = Joi.object({
   jobDescription: Joi.string(),
 
   status: Joi.string()
-    .valid('Pending', 'Reject', 'Interview', 'Hired')
+    .valid('Pending', 'Applied', 'Reject', 'Interview', 'Hired')
     .messages({
-      'any.only': 'Status must be one of: Pending, Reject, Interview, Hired',
+      'any.only': 'Status must be one of: Pending, Applied, Reject, Interview, Hired',
     }),
 
   notes: Joi.string()
@@ -146,13 +146,13 @@ export const updateJobSchema = Joi.object({
 
 /**
  * Validation schema for job ID parameter
- * Validates UUID v4 format
+ * Validates MongoDB ObjectID format (24-character hexadecimal string)
  */
 export const jobIdSchema = Joi.string()
-  .uuid({ version: 'uuidv4' })
+  .pattern(/^[0-9a-fA-F]{24}$/)
   .required()
   .messages({
-    'string.guid': 'Job ID must be a valid UUID',
+    'string.pattern.base': 'Job ID must be a valid MongoDB ObjectID',
     'any.required': 'Job ID is required',
   });
 
@@ -161,9 +161,9 @@ export const jobIdSchema = Joi.string()
  * Used in query/path parameters
  */
 export const statusSchema = Joi.string()
-  .valid('Pending', 'Reject', 'Interview', 'Hired')
+  .valid('Pending', 'Applied', 'Reject', 'Interview', 'Hired')
   .required()
   .messages({
-    'any.only': 'Status must be one of: Pending, Reject, Interview, Hired',
+    'any.only': 'Status must be one of: Pending, Applied, Reject, Interview, Hired',
     'any.required': 'Status is required',
   });

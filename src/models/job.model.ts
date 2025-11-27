@@ -52,7 +52,7 @@ const jobSchema = new Schema<JobDocument>(
     status: {
       type: String,
       required: true,
-      enum: ['Pending', 'Reject', 'Interview', 'Hired'] as JobStatus[],
+      enum: ['Pending', 'Applied', 'Reject', 'Interview', 'Hired'] as JobStatus[],
       default: 'Pending',
     },
     notes: {

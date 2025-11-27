@@ -13,7 +13,7 @@ export interface Job {
   updatedAt: string;
 }
 
-export type JobStatus = "Pending" | "Reject" | "Interview" | "Hired";
+export type JobStatus = "Pending" | "Applied" | "Reject" | "Interview" | "Hired";
 
 export interface CreateJobDTO {
   jobTitle: string;

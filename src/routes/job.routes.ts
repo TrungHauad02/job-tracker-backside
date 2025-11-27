@@ -6,12 +6,44 @@
  */
 
 import express from 'express';
+import multer from 'multer';
 import * as jobController from '../controllers/job.controller.js';
+import * as csvController from '../controllers/csv.controller.js';
 import { validateRequest, validateParams } from '../middlewares/validation.middleware.js';
 import { createJobSchema, updateJobSchema, jobIdSchema, statusSchema } from '../validators/job.validator.js';
 import Joi from 'joi';
 
 const router = express.Router();
+
+// Configure multer for CSV file upload
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 10 * 1024 * 1024, // 10MB limit
+  },
+  fileFilter: (req: Express.Request, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
+    if (file.mimetype === 'text/csv' || file.originalname.endsWith('.csv')) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only CSV files are allowed'));
+    }
+  },
+});
+
+/**
+ * GET /api/jobs/export
+ * Export all jobs as CSV file
+ * Response: CSV file download
+ */
+router.get('/export', csvController.exportJobsHandler);
+
+/**
+ * POST /api/jobs/import
+ * Import jobs from CSV file
+ * Body: multipart/form-data with 'file' field
+ * Response: Import result with statistics
+ */
+router.post('/import', upload.single('file'), csvController.importJobsHandler);
 
 /**
  * POST /api/jobs

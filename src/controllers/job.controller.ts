@@ -180,7 +180,7 @@ export const getJobsByStatusHandler = async (req: Request, res: Response): Promi
     const { status } = req.params;
 
     // Validate status value
-    const validStatuses: JobStatus[] = ['Pending', 'Reject', 'Interview', 'Hired'];
+    const validStatuses: JobStatus[] = ['Pending', 'Applied', 'Reject', 'Interview', 'Hired'];
     if (!validStatuses.includes(status as JobStatus)) {
       const response: ApiResponse<never> = {
         success: false,
