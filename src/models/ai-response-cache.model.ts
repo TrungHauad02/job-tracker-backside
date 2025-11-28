@@ -89,7 +89,6 @@ const aiResponseCacheSchema = new Schema<AIResponseCacheDocument>(
     expiresAt: {
       type: Date,
       required: true,
-      index: true, // TTL index
     },
   },
   {
